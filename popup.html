@@ -1,0 +1,17 @@
+function playFameSound() {
+  const url = chrome.runtime.getURL('faaah.mp3');
+  const audio = new Audio(url);
+  audio.volume = 1.0;
+  audio.play().catch(e => console.error('FAME play error:', e));
+}
+
+document.getElementById('testBtn').addEventListener('click', () => {
+  const btn = document.getElementById('testBtn');
+  btn.textContent = '🎺 FAAAAME...';
+  btn.style.background = 'linear-gradient(135deg, #883300, #662200)';
+  playFameSound();
+  setTimeout(() => {
+    btn.textContent = '▶ TEST SOUND';
+    btn.style.background = '';
+  }, 2000);
+});

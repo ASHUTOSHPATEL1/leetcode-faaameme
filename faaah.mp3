@@ -1,0 +1,12 @@
+// Only inject once per tab when page is fully loaded
+const LEETCODE_PATTERN = /leetcode\.com\/problems\//;
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return;
+  if (!tab.url || !LEETCODE_PATTERN.test(tab.url)) return;
+
+  chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content.js']
+  }).catch(() => {});
+});

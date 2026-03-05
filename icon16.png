@@ -1,0 +1,125 @@
+(function() {
+  if (window.__fameRunning) return;
+  window.__fameRunning = true;
+  console.log('[FAME] v8 injected');
+
+  function playFameSound() {
+    const url = chrome.runtime.getURL('faaah.mp3');
+    const audio = new Audio(url);
+    audio.volume = 1.0;
+    audio.play().catch(e => console.error('[FAME] play error:', e));
+  }
+
+  function showFailToast(reason) {
+    const existing = document.getElementById('fame-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = 'fame-toast';
+    toast.innerHTML = `
+      <div id="fame-inner" style="
+        position:fixed;top:24px;right:24px;z-index:2147483647;
+        background:linear-gradient(135deg,#1a1a2e,#16213e);
+        border:2px solid #ff4444;border-radius:16px;
+        padding:18px 24px;color:white;
+        font-family:'Courier New',monospace;font-size:15px;font-weight:bold;
+        box-shadow:0 8px 32px rgba(255,68,68,0.4);
+        display:flex;align-items:center;gap:12px;max-width:320px;
+        animation:fameIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275) forwards;">
+        <span style="font-size:32px;display:inline-block;animation:fameBounce 0.5s ease infinite alternate;">🎺</span>
+        <div>
+          <div style="font-size:18px;color:#ff4444;margin-bottom:4px;">FAAAAME</div>
+          <div style="font-size:12px;color:#aaa;font-weight:normal;">${reason}</div>
+        </div>
+      </div>
+      <style>
+        @keyframes fameIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+        @keyframes fameOut{from{transform:translateX(0);opacity:1}to{transform:translateX(120%);opacity:0}}
+        @keyframes fameBounce{from{transform:rotate(-10deg)}to{transform:rotate(10deg) scale(1.15)}}
+      </style>`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      const inner = document.getElementById('fame-inner');
+      if (inner) inner.style.animation = 'fameOut 0.3s ease forwards';
+      setTimeout(() => toast.remove(), 350);
+    }, 5000);
+  }
+
+  // Only trigger once per submission result
+  // Track the last result text so we don't re-trigger on the same result
+  let lastTriggeredResult = '';
+  let triggered = false;
+
+  function triggerFame(reason) {
+    if (triggered) return;
+    if (reason === lastTriggeredResult) return;
+    triggered = true;
+    lastTriggeredResult = reason;
+    console.log('[FAME] TRIGGERED:', reason);
+    playFameSound();
+    showFailToast(reason);
+    // Allow triggering again after 8s (for next submission)
+    setTimeout(() => { triggered = false; }, 8000);
+  }
+
+  const FAIL_TEXTS = [
+    'Wrong Answer',
+    'Time Limit Exceeded',
+    'Runtime Error',
+    'Compile Error',
+    'Memory Limit Exceeded',
+    'Output Limit Exceeded',
+  ];
+
+  // Only match nodes that are small and specific — not giant containers
+  // that contain fail text somewhere deep inside unrelated content
+  function checkNode(node) {
+    if (!node) return;
+    const text = (node.textContent || '').trim();
+    // Must be short — result labels are just a few words
+    if (text.length > 40) return;
+    for (const fail of FAIL_TEXTS) {
+      if (text === fail) {
+        triggerFame(fail);
+        return;
+      }
+    }
+  }
+
+  // Watch only for newly ADDED nodes (not characterData which fires constantly)
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          // Check the node itself
+          checkNode(node);
+          // Check its direct children only (not deep scan - avoids false positives)
+          node.querySelectorAll('span, div, h4, h5, p').forEach(checkNode);
+        }
+      }
+    }
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+
+  // Reset triggered flag when a new submission starts
+  // (detected by the "Pending" state appearing)
+  const resetObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const text = (node.textContent || '').trim();
+          if (text === 'Pending' || text.includes('Pending')) {
+            triggered = false;
+            lastTriggeredResult = '';
+            console.log('[FAME] Reset - new submission detected');
+          }
+        }
+      }
+    }
+  });
+  resetObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+})();
